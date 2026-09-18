@@ -44,53 +44,65 @@ below.
 
 ## What's NOT in this repo, and what this repo never does
 
-`overlay/root/fumagician/{fumagician, DSRD.enc, <FWREV>.enc}` and
-`overlay/etc/fumagician-target-model` are **not** included, and never
-will be. `fumagician` is Samsung's proprietary binary, and the `.enc`
-files are Samsung's signed/encrypted firmware payload — both come from
-Samsung's own official firmware update ISO, and redistributing them
-isn't this repo's call to make.
+`samsungiso/staging/{fumagician, DSRD.enc, <FWREV>.enc, target-model}`
+and `overlay/root/fumagician/{fumagician, DSRD.enc, <FWREV>.enc}` are
+**not** included, and never will be. `fumagician` is Samsung's
+proprietary binary, and the `.enc` files are Samsung's
+signed/encrypted firmware payload — both come from Samsung's own
+official firmware update ISO, and redistributing them isn't this
+repo's call to make.
 
 Nothing in this repo downloads anything from Samsung, or from Alpine,
 on your behalf. You get both ISOs yourself, from their official
 sources, and hand them to the scripts. That's deliberate — this repo
 only ever touches files you already have on disk.
 
+## Repo layout
+
+Three plain directories mark where things go — nothing auto-detects
+their contents, they're just where the scripts below expect their
+inputs and put their output, and each has its own `.gitignore` so
+nothing you drop in them ends up in a commit:
+
+- `samsungiso/` — put the Samsung firmware ISO you downloaded here.
+  `extract-firmware.sh` stages the three files it pulls out of it in
+  `samsungiso/staging/`.
+- `alpineiso/` — put the stock Alpine ISO you downloaded here.
+- `repackiso/` — `pack-overlay.sh` and `build-uefi-iso.sh` write their
+  output here (the packed apkovl and the final bootable ISO).
+
 ## Building and booting
 
 1. Download your drive's firmware update ISO yourself, from Samsung's
    official support site for your exact model (e.g.
-   `Samsung_SSD_960_EVO_3B7QCXE7.iso`). Nothing here fetches this for
-   you.
+   `Samsung_SSD_960_EVO_3B7QCXE7.iso`), into `samsungiso/`. Nothing
+   here fetches this for you.
 2. Download the official Alpine "standard" or "extended" **x86_64** ISO
    yourself, from
    [alpinelinux.org/downloads](https://alpinelinux.org/downloads/)
-   (pick another architecture if your hardware needs it). Don't unpack
-   or modify it.
-3. `git clone` this repo.
-4. Put both ISOs wherever's convenient — inside the cloned repo is
-   fine, they're gitignored either way.
-5. `scripts/extract-firmware.sh <samsung-firmware.iso> "<model
+   (pick another architecture if your hardware needs it), into
+   `alpineiso/`. Don't unpack or modify it.
+3. `git clone` this repo (if you haven't already).
+4. `scripts/extract-firmware.sh samsungiso/<file>.iso "<model
    substring>"` — unpacks the Samsung ISO (it's just a kernel + initrd;
    no mounting, no Windows, no Magician needed) and stages
-   `fumagician`/`DSRD.enc`/`<FWREV>.enc` into
-   `overlay/root/fumagician/`, then writes `<model substring>` to
-   `overlay/etc/fumagician-target-model`. Use something specific enough
-   to only match your drive in `/sys/class/nvme/*/model`, e.g.
-   `"960 EVO"`, `"970 EVO Plus"`, `"990 PRO"`.
-6. `scripts/build-uefi-iso.sh <alpine-standard-*.iso>` — one command
-   for "pack the overlay, add it to the ISO, done": it runs
-   `pack-overlay.sh` (tars `overlay/` into
-   `build/localhost.apkovl.tar.gz` — runnable on its own if you just
-   want to inspect that file) and then uses
+   `fumagician`/`DSRD.enc`/`<FWREV>.enc` in `samsungiso/staging/`. Use
+   a model substring specific enough to only match your drive in
+   `/sys/class/nvme/*/model`, e.g. `"960 EVO"`, `"970 EVO Plus"`,
+   `"990 PRO"`.
+5. `scripts/build-uefi-iso.sh alpineiso/<file>.iso` — one command for
+   "pack the overlay, add it to the ISO, done": it runs
+   `pack-overlay.sh` (copies the staged files into `overlay/` and tars
+   it into `repackiso/localhost.apkovl.tar.gz` — runnable on its own
+   if you just want to inspect that file) and then uses
    `xorriso ... -boot_image any replay` to clone the stock Alpine ISO's
    existing BIOS+UEFI boot records unchanged while adding the apkovl at
-   `/localhost.apkovl.tar.gz`. Produces `build/the-magic-mountain.iso`.
-   No custom kernel/initrd/grub.cfg assembly — this is the actual
-   technique that was verified to work, ~350MB image, no exotic
-   tooling.
-7. Plug in a USB stick you're willing to erase, then
-   `sudo scripts/dd-usb.sh build/the-magic-mountain.iso /dev/sdX` —
+   `/localhost.apkovl.tar.gz`. Produces
+   `repackiso/the-magic-mountain.iso`. No custom kernel/initrd/grub.cfg
+   assembly — this is the actual technique that was verified to work,
+   ~350MB image, no exotic tooling.
+6. Plug in a USB stick you're willing to erase, then
+   `sudo scripts/dd-usb.sh repackiso/the-magic-mountain.iso /dev/sdX` —
    writes the hybrid ISO straight to it. No partitioning, no bootloader
    install step, no Ventoy; this is the method that was actually
    verified to work. It looks up `/dev/sdX`'s real serial via
@@ -98,19 +110,19 @@ only ever touches files you already have on disk.
    confirm before it touches anything — that's what stops you from
    wiping the wrong disk. It is not optional and there is no override
    flag.
-8. Boot the media, unplug/unmount anything else touching the target NVMe
+7. Boot the media, unplug/unmount anything else touching the target NVMe
    drive, and run `fumagician` at the prompt. It will refuse to proceed
    if the wrong drive is detected or an NVMe filesystem is still
    mounted.
 
-That's seven small, independently-inspectable steps rather than one
+That's six small, independently-inspectable steps rather than one
 script that does everything — slower to type, but each stage is
 something you can open and read before running, and a mistake at one
 stage doesn't hide inside a bigger one.
 
 ### Alternative / untested method
 
-`scripts/write-ventoy-usb.sh` writes the ISO from step 6 onto a Ventoy
+`scripts/write-ventoy-usb.sh` writes the ISO from step 5 onto a Ventoy
 stick instead of `dd`-ing it directly — useful if you want to keep other
 ISOs on the same drive. It was never actually used for the working
 result (`dd-usb.sh` was). Ventoy was originally tried to work around

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Extracts fumagician/DSRD.enc/<FWREV>.enc from Samsung's own official
-# firmware update ISO and stages them in overlay/root/fumagician/.
+# firmware update ISO and stages them in samsungiso/staging/. Run
+# pack-overlay.sh next — it copies these into overlay/ and packs it.
 #
 # This script never touches Samsung's servers. You download the ISO
 # yourself, from Samsung's official support site, for your exact drive
@@ -13,8 +14,9 @@ Usage: extract-firmware.sh <samsung-firmware-update.iso> <target-model-string>
 
 <samsung-firmware-update.iso> is the ISO you download yourself from
 Samsung's official support site, for your exact drive and firmware
-revision (e.g. Samsung_SSD_960_EVO_3B7QCXE7.iso). Nothing here fetches
-it for you.
+revision (e.g. samsungiso/Samsung_SSD_960_EVO_3B7QCXE7.iso — samsungiso/
+is a plain drop-zone directory in this repo, nothing auto-detects
+what's in it). Nothing here fetches it for you.
 
 <target-model-string> is matched (as a substring) against
 /sys/class/nvme/*/model at boot — the wrapper refuses to run fumagician
@@ -29,7 +31,7 @@ EOF
 samsung_iso=$1
 target_model=$2
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-dest="${repo_root}/overlay/root/fumagician"
+dest="${repo_root}/samsungiso/staging"
 
 test -s "$samsung_iso" || { echo "Missing or empty: $samsung_iso" >&2; exit 1; }
 [[ -n "$target_model" ]] || { echo "target-model-string must not be empty." >&2; exit 1; }
@@ -70,12 +72,13 @@ mkdir -p "$dest"
 install -m 700 "$src/fumagician" "$dest/fumagician"
 install -m 600 "$src/DSRD.enc" "$dest/DSRD.enc"
 install -m 600 "$fw_enc" "$dest/$(basename "$fw_enc")"
-printf '%s' "$target_model" > "${repo_root}/overlay/etc/fumagician-target-model"
+printf '%s' "$target_model" > "$dest/target-model"
 
 echo
-echo "Installed into $dest:"
+echo "Staged into $dest:"
 ls -la "$dest"
 echo
 echo "Target firmware : $(basename "$fw_enc" .enc)"
 echo "Target model    : $target_model"
-echo "These files are gitignored — they will not be committed."
+echo "Run scripts/pack-overlay.sh next. These files are gitignored — they"
+echo "will not be committed."

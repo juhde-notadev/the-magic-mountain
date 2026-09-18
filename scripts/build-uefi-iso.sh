@@ -8,13 +8,15 @@
 #
 # Get the stock ISO from https://alpinelinux.org/downloads/ — pick the
 # "standard" or "extended" x86_64 release (aarch64 etc. also work if your
-# hardware needs it). It already ships NVMe/USB/UEFI drivers.
+# hardware needs it). It already ships NVMe/USB/UEFI drivers. Drop it in
+# alpineiso/ (a plain directory in this repo, nothing auto-detects it —
+# pass the path explicitly below).
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 stock_iso=${1:?Usage: build-uefi-iso.sh <stock-alpine-iso> [output.iso]}
-output=${2:-${repo_root}/build/the-magic-mountain.iso}
-apkovl="${repo_root}/build/localhost.apkovl.tar.gz"
+output=${2:-${repo_root}/repackiso/the-magic-mountain.iso}
+apkovl="${repo_root}/repackiso/localhost.apkovl.tar.gz"
 
 test -s "${stock_iso}" || { echo "${stock_iso} missing." >&2; exit 1; }
 command -v xorriso >/dev/null 2>&1 || {

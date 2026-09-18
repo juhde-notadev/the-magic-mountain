@@ -1,6 +1,7 @@
-build/
 overlay/root/fumagician/fumagician
 overlay/root/fumagician/*.enc
 overlay/etc/fumagician-target-model
+# Backstop in case an ISO/apkovl ends up somewhere other than
+# samsungiso/, alpineiso/, or repackiso/ (each has its own .gitignore).
 *.iso
 *.apkovl.tar.gz
