@@ -1,26 +1,92 @@
 #!/bin/sh
 set -eu
 
+fw_dir=/root/fumagician
+target_model_file=/etc/fumagician-target-model
+
+trim() {
+    awk '{$1=$1};1'
+}
+
+find_target_device() {
+    for model_file in /sys/class/nvme/nvme*/model; do
+        [ -r "$model_file" ] || continue
+        case "$(trim < "$model_file")" in
+            *"$target_model"*) dirname "$model_file"; return 0 ;;
+        esac
+    done
+    return 1
+}
+
+if [ ! -s "$target_model_file" ]; then
+    echo "Refusing to run: $target_model_file is missing or empty." >&2
+    echo "This overlay wasn't built with a target drive configured — re-run" >&2
+    echo "scripts/extract-firmware.sh with your drive's model string." >&2
+    exit 1
+fi
+target_model=$(trim < "$target_model_file")
+
+fw_enc=$(find "$fw_dir" -maxdepth 1 -name '*.enc' ! -name 'DSRD.enc' 2>/dev/null | head -n1)
+if [ -z "$fw_enc" ]; then
+    echo "Refusing to run: no firmware .enc payload found in $fw_dir." >&2
+    exit 1
+fi
+target_fw_rev=$(basename "$fw_enc" .enc)
+
 if awk '$1 ~ /^\/dev\/nvme/ { mounted=1 } END { exit !mounted }' /proc/mounts; then
     echo "Refusing to run: an NVMe filesystem is mounted." >&2
     exit 1
 fi
 
-models=''
-for model_file in /sys/class/nvme/nvme*/model; do
-    [ -r "$model_file" ] || continue
-    model=$(cat "$model_file")
-    models="${models}${model}\n"
+nvme_dev=$(find_target_device) || {
+    echo "Refusing to run: target model \"$target_model\" was not detected." >&2
+    echo "Detected NVMe models:" >&2
+    for model_file in /sys/class/nvme/nvme*/model; do
+        [ -r "$model_file" ] && echo " - $(trim < "$model_file")" >&2
+    done
+    exit 2
+}
+
+before_rev=$(trim < "$nvme_dev/firmware_rev" 2>/dev/null || echo unknown)
+echo "Target drive     : $(trim < "$nvme_dev/model")"
+echo "Current firmware : $before_rev"
+echo "Target firmware  : $target_fw_rev"
+echo
+echo "Starting fumagician — it will ask for confirmation before flashing."
+echo
+
+cd "$fw_dir"
+set +e
+./fumagician
+rc=$?
+set -e
+
+echo
+if [ "$rc" -ne 0 ]; then
+    echo "FLASH FAILED: fumagician exited with status $rc." >&2
+    exit "$rc"
+fi
+
+echo "fumagician exited successfully (status 0). Verifying firmware revision..."
+attempt=0
+after_rev="$before_rev"
+while [ "$attempt" -lt 10 ]; do
+    check_dev=$(find_target_device 2>/dev/null) || check_dev=""
+    if [ -n "$check_dev" ] && [ -r "$check_dev/firmware_rev" ]; then
+        after_rev=$(trim < "$check_dev/firmware_rev")
+        [ "$after_rev" = "$target_fw_rev" ] && break
+    fi
+    attempt=$((attempt + 1))
+    sleep 1
 done
 
-case "$models" in
-    *Samsung*SSD*960*EVO*) ;;
-    *)
-        echo "Refusing to run: Samsung SSD 960 EVO was not detected." >&2
-        printf 'Detected NVMe models:\n%b' "$models" >&2
-        exit 2
-        ;;
-esac
-
-cd /root/fumagician
-exec ./fumagician
+echo
+if [ "$after_rev" = "$target_fw_rev" ]; then
+    echo "FLASH VERIFIED: drive now reports firmware $after_rev."
+else
+    echo "FLASH STATUS UNCONFIRMED: fumagician reported success, but the" >&2
+    echo "drive still reports firmware \"$after_rev\" (expected \"$target_fw_rev\")." >&2
+    echo "Some firmware updates only activate after a full power cycle —" >&2
+    echo "reboot and re-run this check before assuming it failed." >&2
+    exit 3
+fi

@@ -1,7 +1,7 @@
 clear
-printf '%s\n' 'Samsung 960 EVO firmware environment'
-printf '%s\n' 'Starting Fumagician as root. The updater will ask before flashing.'
-printf '%s\n\n' 'The NVMe safety check remains enabled.'
+printf '%s\n' 'Samsung NVMe firmware environment'
+printf '%s\n' 'Starting Fumagician as root. It will ask for confirmation before'
+printf '%s\n\n' 'flashing, then report whether the flash was verified.'
 
 /usr/local/bin/fumagician || printf '%s\n' 'Fumagician exited; root shell remains available.'
 exec /bin/sh

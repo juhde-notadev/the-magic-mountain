@@ -1,7 +1,8 @@
-Samsung 960 EVO firmware environment
+Samsung NVMe firmware environment
 
 The internal NVMe SSD is not mounted. Run:
     fumagician
 
 The wrapper refuses to start if an NVMe filesystem is mounted or if the
-Samsung SSD 960 EVO is not detected.
+configured target drive model is not detected, and it verifies the
+firmware revision after flashing instead of exiting silently.
