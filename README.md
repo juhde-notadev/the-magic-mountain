@@ -47,29 +47,44 @@ permissions. They're gitignored — they will never end up in a commit.
 
 ## Building and booting
 
+This is the workflow that was actually used, end to end, and it's smaller
+and simpler than it might look — the whole image is around 300MB:
+
 1. Prepare a boot tree: get a stock Alpine `bzImage` + `initrd` (the
    "standard" or "extended" ISO/netboot release already has NVMe/USB/UEFI
-   drivers), and a `grub.cfg` that chainloads them. Lay these out as
+   drivers baked in — that's really all you need, plus a root shell), and
+   a `grub.cfg` that chainloads them. Lay these out as
    `boot-tree/{bzImage,initrd,boot/grub/grub.cfg}`.
 2. `scripts/extract-firmware.sh ...` — populate the overlay with your own
    Samsung files (see above).
 3. `scripts/pack-overlay.sh` — tars `overlay/` into
    `build/fumagician.apkovl.tar.gz`.
-4. Either:
-   - `scripts/build-uefi-iso.sh boot-tree/ build/the-magic-mountain.iso`,
-     then write it to a USB with `dd` or Ventoy, **or**
-   - `scripts/build-uefi-usb.sh boot-tree/ /dev/sdX <your-drive's-udevadm-ID_SERIAL>`
-     to write directly to a USB stick, **or**
-   - `scripts/write-ventoy-usb.sh <ventoy-dir> build/the-magic-mountain.iso /dev/sdX <your-drive's-udevadm-ID_SERIAL>`
-     if you'd rather keep Ventoy and multiple ISOs on the stick.
+4. `scripts/build-uefi-iso.sh boot-tree/ build/the-magic-mountain.iso` —
+   `grub-mkrescue` produces a BIOS+UEFI hybrid ISO.
+5. `scripts/dd-usb.sh build/the-magic-mountain.iso /dev/sdX <your-drive's-udevadm-ID_SERIAL>` —
+   writes the hybrid ISO straight to the USB stick. No partitioning, no
+   bootloader install step, no Ventoy. This is the only USB-writing method
+   that was actually verified to work.
 
-   The USB scripts require `EXPECTED_USB_SERIAL` to match your actual
-   drive (`udevadm info --query=property --name=/dev/sdX | grep ID_SERIAL`)
-   before they'll touch it — that's what stops you from wiping the wrong
-   disk. It is not optional and there is no override flag.
-5. Boot the media, unplug/unmount anything else touching the target NVMe
+   All the USB-writing scripts require `EXPECTED_USB_SERIAL` to match your
+   actual drive (`udevadm info --query=property --name=/dev/sdX | grep
+   ID_SERIAL`) before they'll touch it — that's what stops you from wiping
+   the wrong disk. It is not optional and there is no override flag.
+6. Boot the media, unplug/unmount anything else touching the target NVMe
    drive, and run `fumagician` at the prompt. It will refuse to proceed if
    the wrong drive is detected or an NVMe filesystem is still mounted.
+
+### Alternative / untested USB-writing methods
+
+`scripts/build-uefi-usb.sh` (partitions the stick and `grub-install`s onto
+it instead of `dd`) and `scripts/write-ventoy-usb.sh` (Ventoy) are also in
+`scripts/`, generalized from earlier attempts, but neither was actually
+used for the working result — `dd-usb.sh` was. Ventoy specifically was a
+dead end here: it was tried to work around Samsung's own official ISO
+being unbootable garbage (no bootloader, no initramfs, nothing), before
+switching to building a real bootable environment from Alpine instead. If
+you use either of these two, treat them as starting points, not proven
+paths.
 
 ## Why "The Magic Mountain"
 
