@@ -31,6 +31,21 @@ below.
   detected in `/sys/class/nvme/*/model`. Only then does it hand off to
   Samsung's real `fumagician` binary in `root/fumagician/` — which asks
   for a `y`/`n` confirmation of its own before it touches anything.
+
+  Worth being honest about: `fumagician` itself already checks the
+  target model internally before it'll do anything, so the wrapper's
+  check is technically redundant against *that* — it was added before
+  that was known, kept anyway, and having two independent checks agree
+  is the right amount of paranoia for something that can brick a
+  drive, not wasted caution. It also earns its keep in a much more
+  mundane way: it catches you having grabbed the wrong firmware ISO in
+  the first place. Samsung's own download pages list a lot of similar
+  model numbers close together and it's easy to walk away with the
+  wrong one (downloaded a 980 PRO ISO by mistake while meaning to grab
+  990 PRO firmware, first time through) — the wrapper refuses
+  immediately with a clear "target model not detected" message instead
+  of you finding out some other way.
+
   Afterward the wrapper doesn't just exit silently: it reads
   `/sys/class/nvme/*/firmware_rev`, compares it against the target
   revision pulled from the `<FWREV>.enc` filename, and prints either
