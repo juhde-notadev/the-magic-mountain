@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Remasters a stock Alpine ISO by adding this repo's packed apkovl at its
-# root, replaying the source ISO's existing BIOS+UEFI boot records
-# unchanged. This is the actual verified technique — no custom kernel,
-# initrd, or grub.cfg assembly required; Alpine's own boot chain is used
-# completely untouched.
+# One command for the "unpack, add the wrapper, repack" stage: packs
+# overlay/ (via pack-overlay.sh — run it standalone if you just want to
+# inspect the apkovl) then remasters the stock Alpine ISO by adding it
+# at the root, replaying the source ISO's existing BIOS+UEFI boot
+# records unchanged. No custom kernel, initrd, or grub.cfg assembly
+# required; Alpine's own boot chain is used completely untouched.
 #
 # Get the stock ISO from https://alpinelinux.org/downloads/ — pick the
 # "standard" or "extended" x86_64 release (aarch64 etc. also work if your
@@ -16,11 +17,12 @@ output=${2:-${repo_root}/build/the-magic-mountain.iso}
 apkovl="${repo_root}/build/localhost.apkovl.tar.gz"
 
 test -s "${stock_iso}" || { echo "${stock_iso} missing." >&2; exit 1; }
-test -s "${apkovl}" || { echo "${apkovl} missing — run pack-overlay.sh first." >&2; exit 1; }
 command -v xorriso >/dev/null 2>&1 || {
     echo "xorriso is required (Arch/BlackArch: pacman -S libisoburn)." >&2
     exit 1
 }
+
+"${repo_root}/scripts/pack-overlay.sh"
 
 mkdir -p "$(dirname "${output}")"
 rm -f "${output}"

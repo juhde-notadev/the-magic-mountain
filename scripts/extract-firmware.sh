@@ -1,59 +1,81 @@
 #!/usr/bin/env bash
-# Populates overlay/root/fumagician/ with the three files Samsung's own
-# updater needs, pulled from YOUR OWN copy of Samsung Magician / the
-# Samsung NVMe firmware update tool, and configures which drive model the
-# safety wrapper is allowed to run against. These files are Samsung's
-# property and are not distributed with this repo — see README.md.
+# Extracts fumagician/DSRD.enc/<FWREV>.enc from Samsung's own official
+# firmware update ISO and stages them in overlay/root/fumagician/.
+#
+# This script never touches Samsung's servers. You download the ISO
+# yourself, from Samsung's official support site, for your exact drive
+# and firmware revision — this only unpacks what you already have.
 set -euo pipefail
 
 usage() {
     cat >&2 <<'EOF'
-Usage: extract-firmware.sh <path-to-fumagician-binary> <path-to-DSRD.enc> <path-to-FWREV.enc> <target-model-string>
+Usage: extract-firmware.sh <samsung-firmware-update.iso> <target-model-string>
 
-Locate these three files inside your own Samsung Magician / NVMe firmware
-update tool installation, matching the drive and firmware revision you
-are targeting:
-  - fumagician      Samsung's firmware-flashing binary (ELF, Linux x86)
-  - DSRD.enc        device/auth descriptor Samsung's tool expects alongside it
-  - <FWREV>.enc      the encrypted firmware image itself, named after the
-                     target firmware revision (e.g. 3B7QCXE7.enc)
+<samsung-firmware-update.iso> is the ISO you download yourself from
+Samsung's official support site, for your exact drive and firmware
+revision (e.g. Samsung_SSD_960_EVO_3B7QCXE7.iso). Nothing here fetches
+it for you.
 
 <target-model-string> is matched (as a substring) against
 /sys/class/nvme/*/model at boot — the wrapper refuses to run fumagician
 unless it's present. Use something specific enough to only match your
-drive, e.g. "970 EVO Plus" or "990 PRO". This isn't 960-EVO-specific:
-any Samsung NVMe drive works as long as fumagician/DSRD.enc/<FWREV>.enc
-come from the matching official Samsung updater for that model.
+drive, e.g. "970 EVO Plus" or "990 PRO".
 EOF
     exit 1
 }
 
-[[ $# -eq 4 ]] || usage
+[[ $# -eq 2 ]] || usage
 
-fumagician_bin=$1
-dsrd_enc=$2
-fw_enc=$3
-target_model=$4
+samsung_iso=$1
+target_model=$2
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 dest="${repo_root}/overlay/root/fumagician"
 
-for f in "$fumagician_bin" "$dsrd_enc" "$fw_enc"; do
-    test -s "$f" || { echo "Missing or empty: $f" >&2; exit 1; }
-done
+test -s "$samsung_iso" || { echo "Missing or empty: $samsung_iso" >&2; exit 1; }
 [[ -n "$target_model" ]] || { echo "target-model-string must not be empty." >&2; exit 1; }
 
-file "$fumagician_bin" | grep -qi 'ELF' || {
-    echo "Warning: $fumagician_bin does not look like an ELF binary." >&2
+for cmd in xorriso cpio; do
+    command -v "$cmd" >/dev/null 2>&1 || { echo "$cmd is required." >&2; exit 1; }
+done
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+echo "Extracting bzImage/initrd from $samsung_iso..."
+xorriso -osirrox on -indev "$samsung_iso" \
+    -extract /bzImage "$work/bzImage" \
+    -extract /initrd "$work/initrd" >/dev/null 2>&1
+
+test -s "$work/initrd" || {
+    echo "Could not extract /initrd from $samsung_iso — is this really" >&2
+    echo "Samsung's official firmware update ISO?" >&2
+    exit 1
 }
 
+echo "Unpacking initrd..."
+mkdir -p "$work/initrd-root"
+# cpio exits nonzero here because it can't mknod dev/console without root —
+# harmless, we only need the regular files below; verified by the test -x
+# check right after instead of trusting cpio's exit status.
+( cd "$work/initrd-root" && zcat "$work/initrd" | cpio -idm 2>/dev/null ) || true
+
+src="$work/initrd-root/root/fumagician"
+test -x "$src/fumagician" || { echo "fumagician binary not found inside $samsung_iso." >&2; exit 1; }
+test -s "$src/DSRD.enc" || { echo "DSRD.enc not found inside $samsung_iso." >&2; exit 1; }
+
+fw_enc=$(find "$src" -maxdepth 1 -name '*.enc' ! -name 'DSRD.enc' | head -n1)
+[[ -n "$fw_enc" ]] || { echo "No firmware .enc payload found inside $samsung_iso." >&2; exit 1; }
+
 mkdir -p "$dest"
-install -m 700 "$fumagician_bin" "$dest/fumagician"
-install -m 600 "$dsrd_enc" "$dest/DSRD.enc"
+install -m 700 "$src/fumagician" "$dest/fumagician"
+install -m 600 "$src/DSRD.enc" "$dest/DSRD.enc"
 install -m 600 "$fw_enc" "$dest/$(basename "$fw_enc")"
 printf '%s' "$target_model" > "${repo_root}/overlay/etc/fumagician-target-model"
 
+echo
 echo "Installed into $dest:"
 ls -la "$dest"
 echo
-echo "Target model set to: $target_model"
+echo "Target firmware : $(basename "$fw_enc" .enc)"
+echo "Target model    : $target_model"
 echo "These files are gitignored — they will not be committed."

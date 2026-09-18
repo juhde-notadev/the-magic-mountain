@@ -42,68 +42,87 @@ below.
   give the host driver a moment to notice and refresh its cached
   Identify Controller data), not to wait out a reboot.
 
-## What's NOT in this repo
+## What's NOT in this repo, and what this repo never does
 
 `overlay/root/fumagician/{fumagician, DSRD.enc, <FWREV>.enc}` and
-`overlay/etc/fumagician-target-model` are **not** included.
-`fumagician` is Samsung's proprietary binary, and the `.enc` files are
-Samsung's signed/encrypted firmware payload — both come from Samsung's
-own Magician / NVMe Firmware Update Tool download, and redistributing
-them isn't this repo's call to make.
+`overlay/etc/fumagician-target-model` are **not** included, and never
+will be. `fumagician` is Samsung's proprietary binary, and the `.enc`
+files are Samsung's signed/encrypted firmware payload — both come from
+Samsung's own official firmware update ISO, and redistributing them
+isn't this repo's call to make.
 
-You need to locate those three files yourself inside your own Magician
-install (or Samsung's standalone Linux NVMe firmware update tool), for
-the exact drive and firmware revision you're targeting, then run:
-
-```sh
-scripts/extract-firmware.sh /path/to/fumagician /path/to/DSRD.enc /path/to/<FWREV>.enc "<model substring>"
-```
-
-`<model substring>` is whatever uniquely identifies your drive in
-`/sys/class/nvme/*/model` — e.g. `"960 EVO"`, `"970 EVO Plus"`, `"990
-PRO"`. This drops the three Samsung files into `overlay/root/fumagician/`
-and writes the model string to `overlay/etc/fumagician-target-model`.
-All four are gitignored — they will never end up in a commit.
+Nothing in this repo downloads anything from Samsung, or from Alpine,
+on your behalf. You get both ISOs yourself, from their official
+sources, and hand them to the scripts. That's deliberate — this repo
+only ever touches files you already have on disk.
 
 ## Building and booting
 
-This is the exact workflow that was verified end to end, ~350MB image,
-no exotic tooling:
-
-1. Download the official Alpine "standard" or "extended" **x86_64** ISO
-   from [alpinelinux.org/downloads](https://alpinelinux.org/downloads/)
-   (pick another architecture if your hardware needs it — the technique
-   is the same). Don't unpack or modify it.
-2. `scripts/extract-firmware.sh ...` — populate the overlay with your own
-   Samsung files and target model (see above).
-3. `scripts/pack-overlay.sh` — tars `overlay/` into
-   `build/localhost.apkovl.tar.gz`.
-4. `scripts/build-uefi-iso.sh /path/to/alpine-standard-*.iso` — uses
-   `xorriso ... -boot_image any replay` to clone the stock ISO's existing
-   BIOS+UEFI boot records unchanged while adding the packed apkovl at
+1. Download your drive's firmware update ISO yourself, from Samsung's
+   official support site for your exact model (e.g.
+   `Samsung_SSD_960_EVO_3B7QCXE7.iso`). Nothing here fetches this for
+   you.
+2. Download the official Alpine "standard" or "extended" **x86_64** ISO
+   yourself, from
+   [alpinelinux.org/downloads](https://alpinelinux.org/downloads/)
+   (pick another architecture if your hardware needs it). Don't unpack
+   or modify it.
+3. `git clone` this repo.
+4. Put both ISOs wherever's convenient — inside the cloned repo is
+   fine, they're gitignored either way.
+5. `scripts/extract-firmware.sh <samsung-firmware.iso> "<model
+   substring>"` — unpacks the Samsung ISO (it's just a kernel + initrd;
+   no mounting, no Windows, no Magician needed) and stages
+   `fumagician`/`DSRD.enc`/`<FWREV>.enc` into
+   `overlay/root/fumagician/`, then writes `<model substring>` to
+   `overlay/etc/fumagician-target-model`. Use something specific enough
+   to only match your drive in `/sys/class/nvme/*/model`, e.g.
+   `"960 EVO"`, `"970 EVO Plus"`, `"990 PRO"`.
+6. `scripts/build-uefi-iso.sh <alpine-standard-*.iso>` — one command
+   for "pack the overlay, add it to the ISO, done": it runs
+   `pack-overlay.sh` (tars `overlay/` into
+   `build/localhost.apkovl.tar.gz` — runnable on its own if you just
+   want to inspect that file) and then uses
+   `xorriso ... -boot_image any replay` to clone the stock Alpine ISO's
+   existing BIOS+UEFI boot records unchanged while adding the apkovl at
    `/localhost.apkovl.tar.gz`. Produces `build/the-magic-mountain.iso`.
-5. `sudo scripts/dd-usb.sh build/the-magic-mountain.iso /dev/sdX` —
-   writes the hybrid ISO straight to the USB stick. No partitioning, no
-   bootloader install step, no Ventoy. This is the method that was
-   actually verified to work. It looks up `/dev/sdX`'s real serial via
+   No custom kernel/initrd/grub.cfg assembly — this is the actual
+   technique that was verified to work, ~350MB image, no exotic
+   tooling.
+7. Plug in a USB stick you're willing to erase, then
+   `sudo scripts/dd-usb.sh build/the-magic-mountain.iso /dev/sdX` —
+   writes the hybrid ISO straight to it. No partitioning, no bootloader
+   install step, no Ventoy; this is the method that was actually
+   verified to work. It looks up `/dev/sdX`'s real serial via
    `udevadm`, shows it to you, and makes you type or paste it back to
    confirm before it touches anything — that's what stops you from
    wiping the wrong disk. It is not optional and there is no override
    flag.
-6. Boot the media, unplug/unmount anything else touching the target NVMe
+8. Boot the media, unplug/unmount anything else touching the target NVMe
    drive, and run `fumagician` at the prompt. It will refuse to proceed
    if the wrong drive is detected or an NVMe filesystem is still
    mounted.
 
+That's seven small, independently-inspectable steps rather than one
+script that does everything — slower to type, but each stage is
+something you can open and read before running, and a mistake at one
+stage doesn't hide inside a bigger one.
+
 ### Alternative / untested method
 
-`scripts/write-ventoy-usb.sh` writes the ISO from step 4 onto a Ventoy
+`scripts/write-ventoy-usb.sh` writes the ISO from step 6 onto a Ventoy
 stick instead of `dd`-ing it directly — useful if you want to keep other
 ISOs on the same drive. It was never actually used for the working
-result (`dd-usb.sh` was); Ventoy was originally tried to work around
-Samsung's own official ISO being unbootable garbage (no bootloader, no
-initramfs, nothing), before switching to remastering a real Alpine ISO
-instead. Treat it as a starting point, not a proven path.
+result (`dd-usb.sh` was). Ventoy was originally tried to work around
+Samsung's own official firmware ISO not booting on UEFI-only hardware —
+turns out that ISO is BIOS-only (`isolinux`, no `/efi` El Torito record
+at all), so on a machine without BIOS/CSM compatibility it simply won't
+boot, full stop. (It's not actually broken or empty — it has a real
+kernel, initrd, and bootloader, just no UEFI path. `extract-firmware.sh`
+unpacks it directly rather than booting it, so this doesn't matter for
+this repo either way.) Ventoy didn't fix that and was dropped in favor
+of remastering a real UEFI-capable Alpine ISO instead. Treat
+`write-ventoy-usb.sh` as a starting point, not a proven path.
 
 ## Other Samsung drives
 
@@ -111,11 +130,10 @@ Nothing about the boot environment, the overlay, or the build scripts is
 specific to the 960 EVO — that's just the drive this was built for. To
 target a different Samsung NVMe SSD (970 EVO Plus, 990 PRO, etc.):
 
-1. Get `fumagician`, `DSRD.enc`, and the firmware `.enc` file for *that*
-   drive from *its* matching Samsung Magician / firmware updater release
-   — don't mix files from different drive generations, they're paired
-   with each other.
-2. Run `extract-firmware.sh` with those files and a model string that
+1. Download *that* drive's official firmware update ISO from Samsung —
+   don't mix files from a different drive's ISO, `fumagician` and the
+   `.enc` payload are paired with each other.
+2. Run `extract-firmware.sh` against that ISO with a model string that
    matches that drive's `/sys/class/nvme/*/model` output.
 3. Everything else in "Building and booting" is unchanged.
 
