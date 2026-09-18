@@ -149,9 +149,20 @@ target a different Samsung NVMe SSD (970 EVO Plus, 990 PRO, etc.):
    matches that drive's `/sys/class/nvme/*/model` output.
 3. Everything else in "Building and booting" is unchanged.
 
-This hasn't been verified on anything but the 960 EVO, since that's the
-only drive it's been run against — if you try it on something else,
-opening an issue with what did or didn't work would help others.
+The only drive this has actually been *flashed* on is the 960 EVO — that
+part can't be tested without the hardware. But the pipeline up to that
+point has been dry-run tested against a second, unrelated drive
+generation: Samsung's real, official 990 PRO firmware ISO
+(`Samsung_SSD_990_PRO_8B2QJXD7.iso`, downloaded from Samsung's own
+download center) ran through `extract-firmware.sh` and
+`build-uefi-iso.sh` with zero code changes and produced a correctly
+configured, correctly bootable image — `overlay/etc/fumagician-target-model`
+came out as `990 PRO`, the firmware payload as `8B2QJXD7.enc`, both
+El Torito boot records intact. So the extraction and build logic is
+confirmed drive-agnostic; what's *not* confirmed is `fumagician`'s
+actual on-drive behavior for anything but the 960 EVO. If you try this
+on real hardware other than a 960 EVO, opening an issue with what did
+or didn't work would help others.
 
 ## Why "The Magic Mountain"
 
