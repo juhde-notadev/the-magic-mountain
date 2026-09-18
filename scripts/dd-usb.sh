@@ -42,7 +42,8 @@ fi
 umount "${device}" 2>/dev/null || true
 for p in "${device}"?*; do umount "$p" 2>/dev/null || true; done
 
-dd if="${iso}" of="${device}" bs=4M status=progress conv=fsync
+echo "Writing (oflag=direct so progress reflects the actual device, not the page cache)..."
+dd if="${iso}" of="${device}" bs=4M status=progress oflag=direct conv=fsync
 sync
 
 echo "Verifying write..."
