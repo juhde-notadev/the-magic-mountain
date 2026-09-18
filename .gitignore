@@ -1,0 +1,5 @@
+build/
+overlay/root/fumagician/fumagician
+overlay/root/fumagician/*.enc
+*.iso
+*.apkovl.tar.gz

@@ -1,0 +1,26 @@
+#!/bin/sh
+set -eu
+
+if awk '$1 ~ /^\/dev\/nvme/ { mounted=1 } END { exit !mounted }' /proc/mounts; then
+    echo "Refusing to run: an NVMe filesystem is mounted." >&2
+    exit 1
+fi
+
+models=''
+for model_file in /sys/class/nvme/nvme*/model; do
+    [ -r "$model_file" ] || continue
+    model=$(cat "$model_file")
+    models="${models}${model}\n"
+done
+
+case "$models" in
+    *Samsung*SSD*960*EVO*) ;;
+    *)
+        echo "Refusing to run: Samsung SSD 960 EVO was not detected." >&2
+        printf 'Detected NVMe models:\n%b' "$models" >&2
+        exit 2
+        ;;
+esac
+
+cd /root/fumagician
+exec ./fumagician

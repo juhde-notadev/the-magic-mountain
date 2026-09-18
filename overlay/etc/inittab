@@ -1,0 +1,12 @@
+::sysinit:/sbin/openrc sysinit
+::sysinit:/sbin/openrc boot
+::wait:/sbin/openrc default
+
+# This image is a single-purpose, offline firmware environment. Root is
+# automatically logged in only on its physical console; serial still requires
+# normal login credentials.
+tty1::respawn:/sbin/getty -n -l /bin/autologin 38400 tty1 linux
+ttyS0::respawn:/sbin/getty -L 115200 ttyS0 vt100
+
+::ctrlaltdel:/sbin/reboot
+::shutdown:/sbin/openrc shutdown
