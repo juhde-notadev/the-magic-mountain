@@ -82,14 +82,12 @@ no exotic tooling:
    `xorriso ... -boot_image any replay` to clone the stock ISO's existing
    BIOS+UEFI boot records unchanged while adding the packed apkovl at
    `/localhost.apkovl.tar.gz`. Produces `build/the-magic-mountain.iso`.
-5. `scripts/dd-usb.sh build/the-magic-mountain.iso /dev/sdX
-   <your-drive's-udevadm-ID_SERIAL>` — writes the hybrid ISO straight to
-   the USB stick. No partitioning, no bootloader install step, no
-   Ventoy. This is the method that was actually verified to work.
-
-   The USB-writing scripts require `EXPECTED_USB_SERIAL` to match your
-   actual drive (`udevadm info --query=property --name=/dev/sdX | grep
-   ID_SERIAL`) before they'll touch it — that's what stops you from
+5. `sudo scripts/dd-usb.sh build/the-magic-mountain.iso /dev/sdX` —
+   writes the hybrid ISO straight to the USB stick. No partitioning, no
+   bootloader install step, no Ventoy. This is the method that was
+   actually verified to work. It looks up `/dev/sdX`'s real serial via
+   `udevadm`, shows it to you, and makes you type or paste it back to
+   confirm before it touches anything — that's what stops you from
    wiping the wrong disk. It is not optional and there is no override
    flag.
 6. Boot the media, unplug/unmount anything else touching the target NVMe

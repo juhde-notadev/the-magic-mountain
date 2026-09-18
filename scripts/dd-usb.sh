@@ -3,14 +3,14 @@
 # so it can be written straight to a USB stick with dd — no partitioning,
 # no bootloader install, no Ventoy needed.
 #
-# SAFETY: this overwrites the entire target device. You MUST pass
-# EXPECTED_USB_SERIAL matching `udevadm info --query=property --name=<device>
-# | grep ID_SERIAL` for your own drive — the script refuses to run otherwise.
+# SAFETY: this overwrites the entire target device. It looks up the
+# device's real serial via udevadm, shows it to you, and makes you
+# type/paste it back before doing anything — that's what stops you from
+# wiping the wrong disk. It is not optional and there is no override flag.
 set -euo pipefail
 
-iso=${1:?Usage: dd-usb.sh <iso> <device> <EXPECTED_USB_SERIAL>}
-device=${2:?Usage: dd-usb.sh <iso> <device> <EXPECTED_USB_SERIAL>}
-expected_serial=${3:?Usage: dd-usb.sh <iso> <device> <EXPECTED_USB_SERIAL>}
+iso=${1:?Usage: dd-usb.sh <iso> <device>}
+device=${2:?Usage: dd-usb.sh <iso> <device>}
 
 if [[ ${EUID} -ne 0 ]]; then
     echo "Run this script with sudo." >&2
@@ -22,11 +22,22 @@ if [[ ! -b ${device} ]] || [[ $(< "/sys/class/block/${dev_basename}/removable") 
     echo "Safety check failed: ${device} is not a removable disk." >&2
     exit 2
 fi
-if ! udevadm info --query=property --name="${device}" | grep -Fxq "ID_SERIAL=${expected_serial}"; then
-    echo "Safety check failed: ${device} does not match EXPECTED_USB_SERIAL." >&2
-    exit 3
+test -s "${iso}" || { echo "${iso} missing." >&2; exit 3; }
+
+actual_serial=$(udevadm info --query=property --name="${device}" | sed -n 's/^ID_SERIAL=//p')
+if [[ -z ${actual_serial} ]]; then
+    echo "Could not read ID_SERIAL for ${device} via udevadm — refusing to continue." >&2
+    exit 4
 fi
-test -s "${iso}" || { echo "${iso} missing." >&2; exit 4; }
+
+echo "About to overwrite this device:"
+udevadm info --query=property --name="${device}" | grep -E '^ID_(VENDOR|MODEL|SERIAL)=' || true
+echo
+read -r -p "Type or paste the ID_SERIAL above to confirm ERASING ${device}: " typed_serial
+if [[ "${typed_serial}" != "${actual_serial}" ]]; then
+    echo "Serial did not match — refusing to continue." >&2
+    exit 5
+fi
 
 umount "${device}" 2>/dev/null || true
 for p in "${device}"?*; do umount "$p" 2>/dev/null || true; done
@@ -38,6 +49,6 @@ echo "Verifying write..."
 iso_size=$(stat -c%s "${iso}")
 src_hash=$(sha256sum "${iso}" | cut -d' ' -f1)
 dst_hash=$(head -c "${iso_size}" "${device}" | sha256sum | cut -d' ' -f1)
-[[ "${src_hash}" == "${dst_hash}" ]] || { echo "Checksum mismatch after dd." >&2; exit 5; }
+[[ "${src_hash}" == "${dst_hash}" ]] || { echo "Checksum mismatch after dd." >&2; exit 6; }
 
 echo "${device} now boots ${iso}."
