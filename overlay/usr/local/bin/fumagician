@@ -68,9 +68,14 @@ if [ "$rc" -ne 0 ]; then
 fi
 
 echo "fumagician exited successfully (status 0). Verifying firmware revision..."
+# Samsung's dual-slot scheme runs a key check against the uploaded image and
+# swaps the active slot in hardware within milliseconds of a good flash — no
+# controller reset involved. This loop is just covering the host driver's
+# time to notice and refresh its cached Identify Controller data, not
+# waiting out a reset or a reboot.
 attempt=0
 after_rev="$before_rev"
-while [ "$attempt" -lt 10 ]; do
+while [ "$attempt" -lt 5 ]; do
     check_dev=$(find_target_device 2>/dev/null) || check_dev=""
     if [ -n "$check_dev" ] && [ -r "$check_dev/firmware_rev" ]; then
         after_rev=$(trim < "$check_dev/firmware_rev")
@@ -84,9 +89,11 @@ echo
 if [ "$after_rev" = "$target_fw_rev" ]; then
     echo "FLASH VERIFIED: drive now reports firmware $after_rev."
 else
-    echo "FLASH STATUS UNCONFIRMED: fumagician reported success, but the" >&2
-    echo "drive still reports firmware \"$after_rev\" (expected \"$target_fw_rev\")." >&2
-    echo "Some firmware updates only activate after a full power cycle —" >&2
-    echo "reboot and re-run this check before assuming it failed." >&2
+    echo "FLASH STATUS UNCONFIRMED: fumagician reported success, but after" >&2
+    echo "${attempt}s the drive still reports firmware \"$after_rev\"" >&2
+    echo "(expected \"$target_fw_rev\"). Activation is normally near-instant," >&2
+    echo "so this isn't a reboot-and-wait situation — it's a signal the flash" >&2
+    echo "may not have actually taken. Don't assume success; check the drive" >&2
+    echo "with nvme-cli or reboot and re-run this check to be sure." >&2
     exit 3
 fi

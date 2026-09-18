@@ -32,11 +32,15 @@ below.
   Samsung's real `fumagician` binary in `root/fumagician/` — which asks
   for a `y`/`n` confirmation of its own before it touches anything.
   Afterward the wrapper doesn't just exit silently: it reads
-  `/sys/class/nvme/*/firmware_rev` (retrying for a few seconds, since a
-  reset can briefly re-enumerate the device), compares it against the
-  target revision pulled from the `<FWREV>.enc` filename, and prints
-  either `FLASH VERIFIED` or a clear `FLASH STATUS UNCONFIRMED` /
-  `FLASH FAILED` — it never leaves you guessing whether it worked.
+  `/sys/class/nvme/*/firmware_rev`, compares it against the target
+  revision pulled from the `<FWREV>.enc` filename, and prints either
+  `FLASH VERIFIED` or a clear `FLASH STATUS UNCONFIRMED` / `FLASH
+  FAILED` — it never leaves you guessing whether it worked. Samsung's
+  dual firmware-slot design runs a key check on the uploaded image and
+  swaps the active slot in hardware within milliseconds — no controller
+  reset involved — so the wrapper only retries for a few seconds (to
+  give the host driver a moment to notice and refresh its cached
+  Identify Controller data), not to wait out a reboot.
 
 ## What's NOT in this repo
 
