@@ -159,6 +159,14 @@ Alpine Linux *is* the mountain; `fumagician` — literally "smoke magician"
 — *is* the trick. Also a nod to Thomas Mann's novel, which is set in an
 Alpine sanatorium. Read into that what you will.
 
+(For the record: the working title was `FU-Magic-Mountain` — `fumagician`
+read as "FU, magician," which is exactly how it felt after Samsung's own
+tool refused to flash firmware onto an M.2 drive using update logic that
+seems to predate M.2 existing at all. Fitting, honestly, but not
+something you want to be explaining in a work Slack channel or to
+someone who'd take it the wrong way, so it stayed as a footnote instead
+of the actual name.)
+
 ## Disclaimer
 
 This flashes firmware on an NVMe drive. That's inherently riskier than
